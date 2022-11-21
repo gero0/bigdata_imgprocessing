@@ -10,6 +10,7 @@ import torch
 import cv2
 import numpy as np
 import os
+import json
 from pyspark.sql import SparkSession
 
 TRESHOLD = 0.4
@@ -42,6 +43,14 @@ brexp = sc.broadcast(exp)
 # files = sc.binaryFiles("hdfs://brick:9000/images/0/1/*/*.jpg")
 files = sc.binaryFiles("hdfs://brick:9000/images/0/0/0/*.jpg")
 
+img_labels_df = spark.read.csv(
+    "hdfs://brick:9000/metadata/train_labels.csv", header=True
+).toPandas()
+
+img_labels_df = img_labels_df.set_index(["id"])
+
+img_labels_bc = sc.broadcast(img_labels_df)
+
 
 def inference(file):
     expp = brexp.value
@@ -56,22 +65,28 @@ def inference(file):
     img = torch.from_numpy(img).unsqueeze(0)
     img = img.float()
 
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    model = brmodel.value.to(device)
+    img = img.to(device)
+
     with torch.no_grad():
-        t0 = time.time()
-        outputs = brmodel.value(img)
+        # t0 = time.time()
+        # outputs = brmodel.value(img)
+        outputs = model(img)
         outputs = postprocess(
             outputs, expp.num_classes, expp.test_conf, expp.nmsthre, class_agnostic=True
         )
-        print("Infer time: {:.4f}s".format(time.time() - t0))
+        # print("Infer time: {:.4f}s".format(time.time() - t0))
     return (file_name, outputs)
 
 
 def get_predictions(file):
     file_name, outputs = file
     output = outputs[0]
+    file_id = os.path.basename(file_name).split('.')[0]
 
     if output is None:
-        return (file_name, {})
+        return (file_id, json.dumps({}))
 
     output = output.cpu()
 
@@ -85,14 +100,31 @@ def get_predictions(file):
         if s > TRESHOLD:
             d[c] = d.get(c, 0) + 1
 
-    return (file_name, d)
+    dstr = json.dumps(d)
+    return (file_id, dstr)
 
 
 inf = files.map(lambda f: inference(f))
 scores = inf.map(lambda f: get_predictions(f))
 
-with open("results.txt", "w+") as resfile:
-    scores = scores.collect()
-    for filename, pred in scores:
-        name = os.path.basename(filename)
-        resfile.write("{};{}\n".format(name, pred))
+score_df = scores.toDF( ("id", "predictions") )
+score_df.write.csv("hdfs://brick:9000/results_predictions", mode="overwrite", header=True)
+
+score_df = score_df.toPandas()
+score_df = score_df.set_index(["id"])
+
+labels_to_check = img_labels_bc.value.loc[score_df.index , :]
+labels_to_check = np.unique ( np.array([val[0] for val in labels_to_check.values]))
+
+def count_objects(class_label):
+    df = img_labels_bc.value
+    images_of_class = df.loc[df['landmark_id'] == str(class_label)]
+    images_of_class = [ index for index in images_of_class.index] 
+    print(class_label)
+    for image in images_of_class:
+        if image in score_df.index:
+            print("image:", image)
+
+
+classes = sc.parallelize(labels_to_check)
+classes.map(count_objects).collect()
