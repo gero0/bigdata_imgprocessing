@@ -3,7 +3,6 @@
 
 from yolox.data.datasets import COCO_CLASSES
 from yolox.exp import get_exp
-from yolox.utils import fuse_model, get_model_info, postprocess, vis
 from yolox.data.data_augment import ValTransform
 import time
 import torch
@@ -105,26 +104,36 @@ def get_predictions(file):
 
 
 inf = files.map(lambda f: inference(f))
-scores = inf.map(lambda f: get_predictions(f))
+predictions = inf.map(lambda f: get_predictions(f))
 
-score_df = scores.toDF( ("id", "predictions") )
-score_df.write.csv("hdfs://brick:9000/results_predictions", mode="overwrite", header=True)
+predictions_df = predictions.toDF( ("id", "predictions") )
+predictions_df.write.csv("hdfs://brick:9000/results_predictions", mode="overwrite", header=True)
 
-score_df = score_df.toPandas()
-score_df = score_df.set_index(["id"])
+predictions_df = predictions_df.toPandas()
+predictions_df = predictions_df.set_index(["id"])
 
-labels_to_check = img_labels_bc.value.loc[score_df.index , :]
+labels_to_check = img_labels_bc.value.loc[predictions_df.index , :]
 labels_to_check = np.unique ( np.array([val[0] for val in labels_to_check.values]))
 
 def count_objects(class_label):
     df = img_labels_bc.value
     images_of_class = df.loc[df['landmark_id'] == str(class_label)]
     images_of_class = [ index for index in images_of_class.index] 
-    print(class_label)
-    for image in images_of_class:
-        if image in score_df.index:
-            print("image:", image)
 
+    d = {}
+
+    for image_id in images_of_class:
+        if image_id in predictions_df.index:
+            image_dict = predictions_df.at[image_id, 'predictions']
+            image_dict = json.loads(image_dict)
+            for key in image_dict:
+                d[key] = d.get(key, 0) + image_dict[key]
+    
+    #must cast label to str because numpyt str is not accespted by csv writer
+    return (str(class_label), json.dumps(d))
+            
 
 classes = sc.parallelize(labels_to_check)
-classes.map(count_objects).collect()
+sums = classes.map(count_objects)
+sums_df = sums.toDF(("landmark_id", "predictions"))
+sums_df.write.csv("hdfs://brick:9000/results_predictions_per_class", mode="overwrite", header=True)
