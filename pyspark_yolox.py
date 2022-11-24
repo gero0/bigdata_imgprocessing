@@ -4,6 +4,7 @@
 from yolox.data.datasets import COCO_CLASSES
 from yolox.exp import get_exp
 from yolox.data.data_augment import ValTransform
+from yolox.utils import postprocess
 import time
 import torch
 import cv2
@@ -40,7 +41,7 @@ brexp = sc.broadcast(exp)
 
 # files = sc.binaryFiles("hdfs://brick:9000/images/*/*/*/*.jpg")
 # files = sc.binaryFiles("hdfs://brick:9000/images/0/1/*/*.jpg")
-files = sc.binaryFiles("hdfs://brick:9000/images/0/0/0/*.jpg")
+files = sc.binaryFiles("hdfs://brick:9000/images/0/0/0/*0.jpg")
 
 img_labels_df = spark.read.csv(
     "hdfs://brick:9000/metadata/train_labels.csv", header=True
@@ -122,18 +123,24 @@ def count_objects(class_label):
 
     d = {}
 
+    file_counter = 0
     for image_id in images_of_class:
         if image_id in predictions_df.index:
             image_dict = predictions_df.at[image_id, 'predictions']
             image_dict = json.loads(image_dict)
             for key in image_dict:
                 d[key] = d.get(key, 0) + image_dict[key]
+            file_counter+=1
+
+    avgs = {}
+    for key in d:
+        avgs[key] = d[key] / file_counter
     
     #must cast label to str because numpyt str is not accespted by csv writer
-    return (str(class_label), json.dumps(d))
+    return (str(class_label), json.dumps(d), json.dumps(avgs))
             
 
 classes = sc.parallelize(labels_to_check)
 sums = classes.map(count_objects)
-sums_df = sums.toDF(("landmark_id", "predictions"))
+sums_df = sums.toDF(("landmark_id", "predictions", "averages"))
 sums_df.write.csv("hdfs://brick:9000/results_predictions_per_class", mode="overwrite", header=True)
