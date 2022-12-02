@@ -84,3 +84,47 @@ for _class in detections_per_letter:
     df.write.mode("overwrite").text(
         f"hdfs://{HDFS_HOSTNAME}:9000/alphabet_count/{_class}"
     )
+
+
+def count_images_for_letter(entry, letter):
+    id = entry["landmark_id"]
+    name = landmark_names.at[id, "name"]
+
+    if name[0] != letter:
+        return 0
+
+    return int(entry["image_count"])
+
+
+detections_per_letter_avg = {}
+
+# Stat 2: Detections per letter - average (detections / file_count)
+for _class in classes_of_interest:
+    detections_per_letter_avg[_class] = {}
+
+    for letter in alphabet:
+        images_n = objects_per_class.map(
+            lambda entry: count_images_for_letter(entry, letter)
+        )
+        _sum = images_n.sum()
+        detections_per_letter_avg[_class][letter] = (
+            detections_per_letter[_class][letter] / _sum
+        )
+
+# Write results to local FS and HDFS
+Path("./stats/alphabet_count_avg").mkdir(parents=True, exist_ok=True)
+for _class in detections_per_letter_avg:
+
+    # write to local fs
+    output = "letter;count\n"
+    for letter in detections_per_letter_avg[_class]:
+        output += f"{letter};{detections_per_letter_avg[_class][letter]}\n"
+
+    with open(os.path.join("./stats/alphabet_count_avg", f"{_class}.csv"), "w+") as f:
+        f.write(output)
+
+    # why is there no easy way to write a string to a HDFS file in spark?
+    df = sc.parallelize([output]).coalesce(1).toDF(("string"))
+    df.write.mode("overwrite").text(
+        f"hdfs://{HDFS_HOSTNAME}:9000/alphabet_count_avg/{_class}"
+    )
