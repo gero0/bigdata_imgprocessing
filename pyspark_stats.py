@@ -1,6 +1,7 @@
 from pyspark.sql import SparkSession
 from string import ascii_uppercase
 from pathlib import Path
+from coco_classes import COCO_CLASSES
 import json
 import os
 
@@ -34,7 +35,8 @@ landmark_names = (
 
 # Stat 1: Sum detections of selected object classes for landmarks that start with given letter
 alphabet = [*ascii_uppercase]
-classes_of_interest = [0, 1, 2, 11, 13]
+# classes_of_interest = [0, 1, 2, 11, 13]
+classes_of_interest = [*range(0, len(COCO_CLASSES))]
 detections_per_letter = {}
 
 # return number of detected objects of class _class, but count them only if landmark's name starts with letter
@@ -58,6 +60,7 @@ def count_class_for_letter(entry, letter, _class):
 
 # Stat 1: Sum detections of selected object classes for landmarks that start with given letter
 for _class in classes_of_interest:
+    print(f"Processing class: {_class}")
     detections_per_letter[_class] = {}
 
     for letter in alphabet:
@@ -100,6 +103,7 @@ detections_per_letter_avg = {}
 
 # Stat 2: Detections per letter - average (detections / file_count)
 for _class in classes_of_interest:
+    print(f"Processing class: {_class}")
     detections_per_letter_avg[_class] = {}
 
     for letter in alphabet:
