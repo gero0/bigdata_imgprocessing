@@ -1,9 +1,9 @@
 from pyspark.sql import SparkSession
 from string import ascii_uppercase
 from pathlib import Path
-from coco_classes import COCO_CLASSES
 import json
 import os
+import sys
 
 # Hostname of our HDFS namenode
 HDFS_HOSTNAME = "brick"
@@ -33,102 +33,108 @@ landmark_names = (
     .set_index("landmark_id")
 )
 
+# Write results to local FS and HDFS
+def write_results(dir, headers, dict):
+    Path(f"./stats/{dir}").mkdir(parents=True, exist_ok=True)
+    for _class in dict:
+        output = ";".join(headers) + "\n"
+
+        for obj in dict[_class]:
+            output += f"{obj};{dict[_class][obj]}\n"
+
+        with open(os.path.join(f"./stats/{dir}", f"{_class}.csv"), "w+") as f:
+            f.write(output)
+
+        df = sc.parallelize([output]).coalesce(1).toDF(("string"))
+        df.write.mode("overwrite").text(f"hdfs://{HDFS_HOSTNAME}:9000/{dir}/{_class}")
+
+
 # Stat 1: Sum detections of selected object classes for landmarks that start with given letter
 alphabet = [*ascii_uppercase]
-# classes_of_interest = [0, 1, 2, 11, 13]
-classes_of_interest = [*range(0, len(COCO_CLASSES))]
-detections_per_letter = {}
-
-# return number of detected objects of class _class, but count them only if landmark's name starts with letter
-def count_class_for_letter(entry, letter, _class):
-    id = entry["landmark_id"]
-    name = landmark_names.at[id, "name"]
-
-    if name[0] != letter:
-        return 0
-
-    jsonstr = entry["predictions_sum"]
-    detections = json.loads(jsonstr)
-
-    try:
-        obj_cnt = detections[str(_class)]
-    except:
-        obj_cnt = 0
-
-    return obj_cnt
+classes_of_interest = [0, 1, 2, 11, 13]
+# classes_of_interest = [*range(0, len(COCO_CLASSES))]
 
 
-# Stat 1: Sum detections of selected object classes for landmarks that start with given letter
-for _class in classes_of_interest:
-    print(f"Processing class: {_class}")
-    detections_per_letter[_class] = {}
+if "--skip1" not in sys.argv:
+    # return number of detected objects of class _class, but count them only if landmark's name starts with letter
+    def count_class_for_letter(entry, letter, _class):
+        id = entry["landmark_id"]
+        name = landmark_names.at[id, "name"]
 
-    for letter in alphabet:
-        occurences = objects_per_class.map(
-            lambda entry: count_class_for_letter(entry, letter, _class)
-        )
-        _sum = occurences.sum()
-        detections_per_letter[_class][letter] = _sum
+        if name[0] != letter:
+            return 0
 
-# Write results to local FS and HDFS
-Path("./stats/alphabet_count").mkdir(parents=True, exist_ok=True)
-for _class in detections_per_letter:
+        detections = json.loads(entry["predictions_sum"])
+        return detections.get(str(_class), 0)
 
-    # write to local fs
-    output = "letter;count\n"
-    for letter in detections_per_letter[_class]:
-        output += f"{letter};{detections_per_letter[_class][letter]}\n"
+    def count_images_for_letter(entry, letter):
+        id = entry["landmark_id"]
+        name = landmark_names.at[id, "name"]
 
-    with open(os.path.join("./stats/alphabet_count", f"{_class}.csv"), "w+") as f:
-        f.write(output)
+        if name[0] != letter:
+            return 0
 
-    # why is there no easy way to write a string to a HDFS file in spark?
-    df = sc.parallelize([output]).coalesce(1).toDF(("string"))
-    df.write.mode("overwrite").text(
-        f"hdfs://{HDFS_HOSTNAME}:9000/alphabet_count/{_class}"
+        return int(entry["image_count"])
+
+    # Stat 1: Sum detections of selected object classes for landmarks that start with given letter
+    detections_per_letter = {}
+    detections_per_letter_avg = {}
+
+    for _class in classes_of_interest:
+        detections_per_letter[_class] = {}
+        detections_per_letter_avg[_class] = {}
+
+        for letter in alphabet:
+            occurences = objects_per_class.map(
+                lambda entry: count_class_for_letter(entry, letter, _class)
+            ).sum()
+            images_n = objects_per_class.map(
+                lambda entry: count_images_for_letter(entry, letter)
+            ).sum()
+            detections_per_letter[_class][letter] = occurences
+            detections_per_letter_avg[_class][letter] = occurences / images_n
+
+    write_results("alphabet_count", ["letter", "count"], detections_per_letter)
+    write_results(
+        "alphabet_count_avg", ["letter", "avg_count"], detections_per_letter_avg
     )
 
+if "--skip2" not in sys.argv:
+    cities = ["New York", "Los Angeles", "Detroit", "Paris", "Berlin", "Warsaw"]
 
-def count_images_for_letter(entry, letter):
-    id = entry["landmark_id"]
-    name = landmark_names.at[id, "name"]
+    # return number of detected objects of class _class, but count them only if landmark's name starts with letter
+    def count_class_for_city(entry, city, _class):
+        id = entry["landmark_id"]
+        name = landmark_names.at[id, "name"]
 
-    if name[0] != letter:
-        return 0
+        if city not in name:
+            return 0
 
-    return int(entry["image_count"])
+        detections = json.loads(entry["predictions_sum"])
+        return detections.get(str(_class), 0)
 
+    def count_files_for_city(entry, city):
+        id = entry["landmark_id"]
+        name = landmark_names.at[id, "name"]
 
-detections_per_letter_avg = {}
+        if city not in name:
+            return 0
 
-# Stat 2: Detections per letter - average (detections / file_count)
-for _class in classes_of_interest:
-    print(f"Processing class: {_class}")
-    detections_per_letter_avg[_class] = {}
+        return int(entry["image_count"])
 
-    for letter in alphabet:
-        images_n = objects_per_class.map(
-            lambda entry: count_images_for_letter(entry, letter)
-        )
-        _sum = images_n.sum()
-        detections_per_letter_avg[_class][letter] = (
-            detections_per_letter[_class][letter] / _sum
-        )
+    detections_per_city_avg = {}
 
-# Write results to local FS and HDFS
-Path("./stats/alphabet_count_avg").mkdir(parents=True, exist_ok=True)
-for _class in detections_per_letter_avg:
+    for _class in classes_of_interest:
+        detections_per_city_avg[_class] = {}
+        for city in cities:
+            detections = objects_per_class.map(
+                lambda entry: count_class_for_city(entry, city, _class)
+            ).sum()
+            file_count = objects_per_class.map(
+                lambda entry: count_files_for_city(entry, city)
+            ).sum()
+            detections_per_city_avg[_class][city] = detections / file_count
 
-    # write to local fs
-    output = "letter;count\n"
-    for letter in detections_per_letter_avg[_class]:
-        output += f"{letter};{detections_per_letter_avg[_class][letter]}\n"
-
-    with open(os.path.join("./stats/alphabet_count_avg", f"{_class}.csv"), "w+") as f:
-        f.write(output)
-
-    # why is there no easy way to write a string to a HDFS file in spark?
-    df = sc.parallelize([output]).coalesce(1).toDF(("string"))
-    df.write.mode("overwrite").text(
-        f"hdfs://{HDFS_HOSTNAME}:9000/alphabet_count_avg/{_class}"
+    write_results(
+        "avg_obj_per_city", ["city", "avg_detections"], detections_per_city_avg
     )
