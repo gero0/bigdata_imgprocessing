@@ -4,35 +4,38 @@ import pandas as pd
 from string import ascii_uppercase
 from coco_classes import COCO_CLASSES
 
-# classes_of_interest = [0, 1, 2, 11, 13]
-classes_of_interest = [*range(0, len(COCO_CLASSES))]
+classes_of_interest = [0, 1, 2, 11, 13]
+# classes_of_interest = [*range(0, len(COCO_CLASSES))]
+cities = ["New York", "Los Angeles", "Detroit", "Paris", "Berlin", "Warsaw"]
 
 
-def plots(type):
+def plots(type, x="letter", y="count"):
     Path(f"./plots/{type}").mkdir(parents=True, exist_ok=True)
     for _class in classes_of_interest:
         df = pd.read_csv(f"stats/{type}/{_class}.csv", header=0, sep=";")
 
-        fig = px.bar(df, x="letter", y="count")
+        fig = px.bar(df, x=x, y=y)
         fig.write_html(f"plots/{type}/{COCO_CLASSES[_class]}.html")
 
 
-def heatmap(type):
+def heatmap(type, index_column_name, index_values, column_name="count"):
+    Path(f"./plots/{type}").mkdir(parents=True, exist_ok=True)
     # Heatmap for all classes
-    heatmap_df = pd.DataFrame({"letter": [*ascii_uppercase]})
+    heatmap_df = pd.DataFrame({index_column_name: index_values})
 
     for _class in classes_of_interest:
         df = pd.read_csv(f"stats/{type}/{_class}.csv", header=0, sep=";")
-        df = df.rename(columns={"count": COCO_CLASSES[_class]})
-        heatmap_df = pd.merge(heatmap_df, df, on=["letter"])
+        df = df.rename(columns={column_name: COCO_CLASSES[_class]})
+        heatmap_df = pd.merge(heatmap_df, df, on=[index_column_name])
 
-    heatmap_df = heatmap_df.set_index(["letter"]).transpose()
+    heatmap_df = heatmap_df.set_index([index_column_name]).transpose()
 
     fig = px.imshow(heatmap_df, text_auto=True, aspect="auto")
     fig.write_html(f"plots/{type}/heatmap.html")
 
 
 plots("alphabet_count")
-plots("alphabet_count_avg")
-heatmap("alphabet_count")
-heatmap("alphabet_count_avg")
+plots("alphabet_count_avg", "letter", "avg_count")
+heatmap("alphabet_count", "letter", [*ascii_uppercase])
+heatmap("alphabet_count_avg", "letter", [*ascii_uppercase], "avg_count")
+heatmap("avg_obj_per_city", "city", cities, "avg_detections")
