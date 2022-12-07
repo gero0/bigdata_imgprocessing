@@ -2,5 +2,6 @@ yolox/*
 yolox*
 results*
 full_results
-stats*
+stats.py
+stats/
 plots
