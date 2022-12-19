@@ -4,14 +4,19 @@ import pandas as pd
 from string import ascii_uppercase
 from coco_classes import COCO_CLASSES
 
-classes_of_interest = [0, 1, 2, 11, 13]
-# classes_of_interest = [*range(0, len(COCO_CLASSES))]
+# classes_of_interest = [0, 1, 2, 11, 13]
+classes_of_interest = [*range(0, len(COCO_CLASSES))]
 cities = ["New York", "Los Angeles", "Detroit", "Paris", "Berlin", "Warsaw"]
 
 
-def plots(type, x="letter", y="count"):
+def plots(type, x="letter", y="count", classes_overwrite=[]):
     Path(f"./plots/{type}").mkdir(parents=True, exist_ok=True)
-    for _class in classes_of_interest:
+    if len(classes_overwrite) != 0:
+        classes_to_iter = classes_overwrite
+    else:
+        classes_to_iter = classes_of_interest
+
+    for _class in classes_to_iter:
         df = pd.read_csv(f"stats/{type}/{_class}.csv", header=0, sep=";")
 
         fig = px.bar(df, x=x, y=y)
@@ -36,6 +41,7 @@ def heatmap(type, index_column_name, index_values, column_name="count"):
 
 plots("alphabet_count")
 plots("alphabet_count_avg", "letter", "avg_count")
+plots("people_in_places_with_people", "files considered", "avg_detections", [0])
 heatmap("alphabet_count", "letter", [*ascii_uppercase])
 heatmap("alphabet_count_avg", "letter", [*ascii_uppercase], "avg_count")
 heatmap("avg_obj_per_city", "city", cities, "avg_detections")

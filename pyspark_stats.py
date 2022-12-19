@@ -1,6 +1,7 @@
 from pyspark.sql import SparkSession
 from string import ascii_uppercase
 from pathlib import Path
+from coco_classes import COCO_CLASSES
 import json
 import os
 import sys
@@ -52,7 +53,7 @@ def write_results(dir, headers, dict):
 # Stat 1: Sum detections of selected object classes for landmarks that start with given letter
 alphabet = [*ascii_uppercase]
 classes_of_interest = [0, 1, 2, 11, 13]
-# classes_of_interest = [*range(0, len(COCO_CLASSES))]
+classes_of_interest = [*range(0, len(COCO_CLASSES))]
 
 
 if "--skip1" not in sys.argv:
@@ -137,4 +138,38 @@ if "--skip2" not in sys.argv:
 
     write_results(
         "avg_obj_per_city", ["city", "avg_detections"], detections_per_city_avg
+    )
+
+if "--skip3" not in sys.argv:
+
+    def count_people(entry):
+        detections = json.loads(entry["predictions_sum"])
+        return detections.get(str(0), 0)
+
+    def count_images(entry):
+        return int(entry["image_count"])
+
+    total_people = objects_per_class.map(lambda entry: count_people(entry)).sum()
+    total_files = objects_per_class.map(lambda entry: count_images(entry)).sum()
+
+    print(total_files)
+    print(total_people)
+
+    people_classes = objects_per_class.filter(
+        lambda entry: "people"
+        in landmark_names.at[entry["landmark_id"], "name"].lower()
+    )
+    total_people_in_people = people_classes.map(lambda entry: count_people(entry)).sum()
+    total_people_files = people_classes.map(lambda entry: count_images(entry)).sum()
+
+    print(total_people_files)
+    print(total_people_in_people)
+
+    people_avg = total_people / total_files
+    people_avg_people = total_people_in_people / total_people_files
+
+    people = {0: {"avg_all": people_avg, "avg_people_places": people_avg_people}}
+
+    write_results(
+        "people_in_places_with_people", ["files considered", "avg_detections"], people
     )
