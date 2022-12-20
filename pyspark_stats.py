@@ -7,8 +7,8 @@ import os
 import sys
 
 # Hostname of our HDFS namenode
-HDFS_HOSTNAME = "brick"
-# HDFS_HOSTNAME = "g-furnace"
+# HDFS_HOSTNAME = "brick"
+HDFS_HOSTNAME = "g-furnace"
 
 # Create spark context
 spark = (
@@ -152,18 +152,13 @@ if "--skip3" not in sys.argv:
     total_people = objects_per_class.map(lambda entry: count_people(entry)).sum()
     total_files = objects_per_class.map(lambda entry: count_images(entry)).sum()
 
-    print(total_files)
-    print(total_people)
-
     people_classes = objects_per_class.filter(
         lambda entry: "people"
         in landmark_names.at[entry["landmark_id"], "name"].lower()
     )
+
     total_people_in_people = people_classes.map(lambda entry: count_people(entry)).sum()
     total_people_files = people_classes.map(lambda entry: count_images(entry)).sum()
-
-    print(total_people_files)
-    print(total_people_in_people)
 
     people_avg = total_people / total_files
     people_avg_people = total_people_in_people / total_people_files
@@ -172,4 +167,49 @@ if "--skip3" not in sys.argv:
 
     write_results(
         "people_in_places_with_people", ["files considered", "avg_detections"], people
+    )
+
+
+if "--skip4" not in sys.argv:
+
+    def count_dogs(entry):
+        detections = json.loads(entry["predictions_sum"])
+        return detections.get(str(16), 0)
+
+    def count_images(entry):
+        return int(entry["image_count"])
+
+    objects_under10 = objects_per_class.filter(
+        lambda entry: len(landmark_names.at[entry["landmark_id"], "name"]) < 10
+    )
+    objects_between = objects_per_class.filter(
+        lambda entry: len(landmark_names.at[entry["landmark_id"], "name"]) >= 10
+        and len(landmark_names.at[entry["landmark_id"], "name"]) <= 20
+    )
+    objects_over20 = objects_per_class.filter(
+        lambda entry: len(landmark_names.at[entry["landmark_id"], "name"]) > 20
+    )
+
+    dogs_under10 = objects_under10.map(lambda entry: count_dogs(entry)).sum()
+    files_under10 = objects_under10.map(lambda entry: count_images(entry)).sum()
+    under10_avg = dogs_under10 / files_under10
+
+    dogs_between = objects_between.map(lambda entry: count_dogs(entry)).sum()
+    files_between = objects_between.map(lambda entry: count_images(entry)).sum()
+    between_avg = dogs_between / files_between
+
+    dogs_over20 = objects_over20.map(lambda entry: count_dogs(entry)).sum()
+    files_over20 = objects_over20.map(lambda entry: count_images(entry)).sum()
+    over20_avg = dogs_over20 / files_over20
+
+    dogs = {
+        16: {
+            "under_10_chars": under10_avg,
+            "between_10_and_20_chars": between_avg,
+            "over_20_chars": over20_avg,
+        }
+    }
+
+    write_results(
+        "dogs_by_name_length", ["length_of_landmark_name", "avg_detections"], dogs
     )

@@ -42,6 +42,7 @@ def heatmap(type, index_column_name, index_values, column_name="count"):
 plots("alphabet_count")
 plots("alphabet_count_avg", "letter", "avg_count")
 plots("people_in_places_with_people", "files considered", "avg_detections", [0])
+plots("dogs_by_name_length", "length_of_landmark_name", "avg_detections", [16])
 heatmap("alphabet_count", "letter", [*ascii_uppercase])
 heatmap("alphabet_count_avg", "letter", [*ascii_uppercase], "avg_count")
 heatmap("avg_obj_per_city", "city", cities, "avg_detections")
