@@ -34,6 +34,8 @@ landmark_names = (
     .set_index("landmark_id")
 )
 
+landmark_names = sc.broadcast(landmark_names)
+
 # Write results to local FS and HDFS
 def write_results(dir, headers, dict):
     Path(f"./stats/{dir}").mkdir(parents=True, exist_ok=True)
@@ -79,7 +81,7 @@ if "--skip1" not in sys.argv:
 
     for letter in alphabet:
         objects = objects_per_class.filter(
-            lambda entry: landmark_names.at[entry["landmark_id"], "name"][0] == letter
+            lambda entry: landmark_names.value.at[entry["landmark_id"], "name"][0] == letter
         )
         images_n = objects.map(lambda entry: count_files(entry)).sum()
 
@@ -105,7 +107,7 @@ if "--skip2" not in sys.argv:
 
     for city in cities:
         objects = objects_per_class.filter(
-            lambda entry: city in landmark_names.at[entry["landmark_id"], "name"]
+            lambda entry: city in landmark_names.value.at[entry["landmark_id"], "name"]
         )
         file_count = objects.map(lambda entry: count_files(entry)).sum()
 
@@ -126,7 +128,7 @@ if "--skip3" not in sys.argv:
 
     people_classes = objects_per_class.filter(
         lambda entry: "people"
-        in landmark_names.at[entry["landmark_id"], "name"].lower()
+        in landmark_names.value.at[entry["landmark_id"], "name"].lower()
     )
 
     total_people_in_people = people_classes.map(
@@ -154,14 +156,14 @@ if "--skip3" not in sys.argv:
 if "--skip4" not in sys.argv:
 
     objects_under10 = objects_per_class.filter(
-        lambda entry: len(landmark_names.at[entry["landmark_id"], "name"]) < 10
+        lambda entry: len(landmark_names.value.at[entry["landmark_id"], "name"]) < 10
     )
     objects_between = objects_per_class.filter(
-        lambda entry: len(landmark_names.at[entry["landmark_id"], "name"]) >= 10
-        and len(landmark_names.at[entry["landmark_id"], "name"]) <= 20
+        lambda entry: len(landmark_names.value.at[entry["landmark_id"], "name"]) >= 10
+        and len(landmark_names.value.at[entry["landmark_id"], "name"]) <= 20
     )
     objects_over20 = objects_per_class.filter(
-        lambda entry: len(landmark_names.at[entry["landmark_id"], "name"]) > 20
+        lambda entry: len(landmark_names.value.at[entry["landmark_id"], "name"]) > 20
     )
 
     dogs_under10 = objects_under10.map(lambda entry: count_class(entry, 16)).sum()
