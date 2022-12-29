@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+
+<head>
+  <meta charset="utf-8">
+  <title>Better dashboard</title>
+  <style>
+    html,
+    body {
+      height: 100%;
+      width: 100%;
+      padding: 0;
+      margin: 0;
+    }
+
+    main {
+      height: 95%;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+    }
+
+    .plot_row {
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      display: flex;
+    }
+
+    .plot_row>div {
+      flex: 1;
+      margin: 1em;
+      text-align: center;
+      font-size: 12px;
+      font-family: sans-serif;
+    }
+
+    p {
+      margin-left: auto;
+      margin-right: auto;
+      text-align: center;
+
+    }
+
+    embed {
+      flex: 1;
+      width: 100%;
+      height: 100%;
+    }
+  </style>
+</head>
+
+<body>
+  <main>
+    <div class="plot_row">
+      <div>
+        <embed type="text/html" src="./plots/alphabet_count_avg/heatmap.html">
+          Heatmap of objects detected in photos with landmark's name starting by letter
+      </div>
+      <div>
+        <embed type="text/html" src="./plots/alphabet_count_avg/person.html">
+          Average number of people in photos with landmark's name starting by letter
+      </div>
+    </div>
+    <div class="plot_row">
+      <div>
+        <embed type="text/html" src="./plots/avg_obj_per_city/heatmap.html">
+        <p>Heatmap of objects detected in images with city's name in name</p>
+      </div>
+      <div>
+        <embed type="text/html" src="./plots/dogs_by_name_length/dog.html">
+        <p>Average number of dogs detected divided by landmark name length</p>
+      </div>
+      <div>
+        <embed type="text/html" src="./plots/people_in_places_with_people/person.html">
+          <p>Average number of people detected - all photos vs photos of landmark with 'people' in name</p>
+      </div>
+    </div>
+  </main>
+</body>
+
+</html>
