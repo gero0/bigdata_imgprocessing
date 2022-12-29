@@ -1,0 +1,4 @@
+length_of_landmark_name;avg_detections
+under_10_chars;0.003021749958492446
+between_10_and_20_chars;0.0032628071813590254
+over_20_chars;0.003432905471729487
