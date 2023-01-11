@@ -1,3 +1,4 @@
+from pathlib import Path
 from pyspark.sql import SparkSession
 import cv2
 import numpy as np
@@ -5,6 +6,7 @@ from coco_classes import COCO_CLASSES
 import json
 import os
 import sys
+import math
 
 # Hostname of our HDFS namenode
 # HDFS_HOSTNAME = "brick"
@@ -68,22 +70,68 @@ else:
         sep=";",
     )
 
-colors_df = colors_df.toPandas()
-color_list = colors_df['dominant_color'].to_numpy()
-unique_colors = np.unique(color_list)
 
-unique_colors = sc.parallelize(unique_colors)
+if "--skip_1" not in sys.argv:
+    colors_df = colors_df.toPandas()
+    color_list = colors_df["dominant_color"].to_numpy()
+    unique_colors = np.unique(color_list)
+    unique_colors = sc.parallelize(unique_colors)
 
-def count(color):
-    images_with_dominant = colors_df.loc[colors_df['dominant_color'] == color]
-    return (color, len(images_with_dominant))
+    def count(color):
+        images_with_dominant = colors_df.loc[colors_df["dominant_color"] == color]
+        return (color, len(images_with_dominant))
 
-dominant_count = unique_colors.map(lambda c : count(c))
-dominant_count = dominant_count.toDF()
+    dominant_count = unique_colors.map(lambda c: count(c))
+    dominant_count = dominant_count.toDF()
 
-dominant_count.write.csv(
-    f"hdfs://{HDFS_HOSTNAME}:9000/results_dominant_count",
-    mode="overwrite",
-    header=True,
-    sep=";",
-)
+    dominant_count.write.csv(
+        f"hdfs://{HDFS_HOSTNAME}:9000/results_dominant_count",
+        mode="overwrite",
+        header=True,
+        sep=";",
+    )
+
+if "--skip_2" not in sys.argv:
+
+    primary_colors = [
+        [0, 100, 100],  # red
+        [120, 100, 100],  # green
+        [240, 100, 100],  # blue
+        [180, 100, 100],  # cyan
+        [60, 100, 100],  # yellow
+        [300, 100, 100],  # magenta
+    ]
+
+    primary_count = [0,0,0,0,0,0]
+
+    def c_dist(a, b):
+        return math.sqrt((a[0] - b[0])**2 + (a[1] - b[1])**2 + (a[2] - b[2])**2)
+
+    def get_closest_primary(entry):
+        file_id = entry[0]
+        dominant_c = eval(entry[2])
+        
+        dist = [c_dist(dominant_c, x) for x in primary_colors]
+        minim = min(dist)
+        min_index=dist.index(minim)
+        return min_index
+
+    colors = colors_df.rdd
+    closest = colors.map(get_closest_primary)
+
+    for i in range(0, len(primary_colors)):
+        s = closest.filter(lambda x : x == i).count()
+        primary_count[i] = s
+
+    Path("./stats/closest_primary").mkdir(parents=True, exist_ok=True)
+    for _class in primary_count:
+        output = "primary_color;count\n"
+
+        for i in range(0, len(primary_colors)):
+            output += f"{primary_colors[i]};{primary_count[i]}\n"
+
+        with open("./stats/closest_primary/results.csv", "w+") as f:
+            f.write(output)
+
+        df = sc.parallelize([output]).coalesce(1).toDF(("string"))
+        df.write.mode("overwrite").text(f"hdfs://{HDFS_HOSTNAME}:9000/closest_primary")

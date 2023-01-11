@@ -1,5 +1,6 @@
 from pathlib import Path
 import plotly.express as px
+import plotly.graph_objects as go
 import pandas as pd
 from string import ascii_uppercase
 from coco_classes import COCO_CLASSES
@@ -39,6 +40,17 @@ def heatmap(type, index_column_name, index_values, column_name="count"):
     fig.write_html(f"plots/{type}/heatmap.html")
 
 
+def color_plot():
+    Path(f"./plots/closest_primary").mkdir(parents=True, exist_ok=True)
+    df = pd.read_csv(f"stats/closest_primary/results.csv", header=0, sep=";")
+    colors = ["red", "green", "blue", "cyan", "yellow", "magenta"]
+    fig = go.Figure(
+        data=[go.Bar(x=df["primary_color"], y=df["count"], marker_color=colors)]
+    )
+    fig.write_html(f"plots/closest_primary/results.html")
+
+
+color_plot()
 plots("alphabet_count")
 plots("alphabet_count_avg", "letter", "avg_count")
 plots("people_in_places_with_people", "files considered", "avg_detections", [0])
