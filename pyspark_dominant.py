@@ -54,10 +54,35 @@ def get_avg_dominant_color(file):
     return (file_id, average, dominant)
 
 
-colors = files.map(get_avg_dominant_color)
-colors_df = colors.toDF(("id", "average_color", "dominant_color"))
-colors_df.write.csv(
-    f"hdfs://{HDFS_HOSTNAME}:9000/results_dominant",
+if "--cached-pred" in sys.argv:
+    colors_df = spark.read.csv(
+        f"hdfs://{HDFS_HOSTNAME}:9000/results_dominant", header=True, sep=";"
+    )
+else:
+    colors = files.map(get_avg_dominant_color)
+    colors_df = colors.toDF(("id", "average_color", "dominant_color"))
+    colors_df.write.csv(
+        f"hdfs://{HDFS_HOSTNAME}:9000/results_dominant",
+        mode="overwrite",
+        header=True,
+        sep=";",
+    )
+
+colors_df = colors_df.toPandas()
+color_list = colors_df['dominant_color'].to_numpy()
+unique_colors = np.unique(color_list)
+
+unique_colors = sc.parallelize(unique_colors)
+
+def count(color):
+    images_with_dominant = colors_df.loc[colors_df['dominant_color'] == color]
+    return (color, len(images_with_dominant))
+
+dominant_count = unique_colors.map(lambda c : count(c))
+dominant_count = dominant_count.toDF()
+
+dominant_count.write.csv(
+    f"hdfs://{HDFS_HOSTNAME}:9000/results_dominant_count",
     mode="overwrite",
     header=True,
     sep=";",
