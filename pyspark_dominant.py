@@ -9,8 +9,8 @@ import sys
 import math
 
 # Hostname of our HDFS namenode
-# HDFS_HOSTNAME = "brick"
-HDFS_HOSTNAME = "g-furnace"
+HDFS_HOSTNAME = "brick"
+# HDFS_HOSTNAME = "g-furnace"
 
 n_colors = 4
 
@@ -71,7 +71,7 @@ else:
     )
 
 
-if "--skip_1" not in sys.argv:
+if "--skip1" not in sys.argv:
     colors_df = colors_df.toPandas()
     color_list = colors_df["dominant_color"].to_numpy()
     unique_colors = np.unique(color_list)
@@ -91,7 +91,7 @@ if "--skip_1" not in sys.argv:
         sep=";",
     )
 
-if "--skip_2" not in sys.argv:
+if "--skip2" not in sys.argv:
 
     primary_colors = [
         [0, 100, 100],  # red
